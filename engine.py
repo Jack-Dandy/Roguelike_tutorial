@@ -10,6 +10,11 @@ def main():
     map_width = 80
     map_height = 45
 
+    # Some variables used for the dungeon generation algorithm.
+    room_max_size = 10
+    room_min_size = 6
+    max_rooms = 30
+
     # Making a dictionary that holds game colors.
     colors = {
         'dark_wall': libtcod.Color(0, 0, 100),
@@ -27,6 +32,7 @@ def main():
 
     con = libtcod.console_new(screen_width, screen_height) # Setting up a default console..
     game_map = GameMap(map_width, map_height)
+    game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height, player)
     # Setting up user inputs. Keyboard and mouse.
     key = libtcod.Key()
     mouse = libtcod.Mouse()
