@@ -4,6 +4,7 @@ from enum import Enum, auto
 # In fact, if you're using Python 3.6 or higher, you can use the 'auto' feature to just increment the number for you.
 
 class GameStates(Enum):
-    PLAYERS_TURN = auto()
-    ENEMY_TURN = auto()
+    PLAYERS_TURN = 1
+    ENEMY_TURN = 2
+    PLAYER_DEAD = 3
 

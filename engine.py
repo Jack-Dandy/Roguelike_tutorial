@@ -1,11 +1,14 @@
 import tcod as libtcod
 from input_handlers import handle_keys # Importing a function
+from components.fighter import Fighter # Import the 'fighter' component
 from entity import Entity # Importing a class
 from fov_functions import initialize_fov , recompute_fov # FoV function
 from game_states import GameStates # state enums
-from render_functions import clear_all, render_all # Importing some functions
+from render_functions import clear_all, render_all, RenderOrder # Importing some functions
 from map_objects.game_map import GameMap
 from entity import Entity, get_blocking_entities_at_location
+from death_functions import kill_monster, kill_player
+
 
 def main():
     # Variables for screen and map size.
@@ -36,7 +39,8 @@ def main():
     }
     # We use 'int' casting since the libtcod functions require integers, not floats.
     # Creating the entities for the game..
-    player = Entity(0, 0, '@', libtcod.white, 'Player', blocks=True)
+    fighter_component = Fighter(hp=30, defense=2, power=5)
+    player = Entity(0, 0, '@', libtcod.white, 'Player', blocks=True, render_order=RenderOrder.ACTOR, fighter=fighter_component)
     entities = [player] # Putting the entities in a list.
 
     libtcod.console_set_custom_font('arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
@@ -61,7 +65,7 @@ def main():
         libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS, key, mouse) # This will record user inputs in the 'key' and 'mouse' variables.
         if fov_recompute: # Check if to recompute FoV.
             recompute_fov(fov_map, player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
-        render_all(con, entities, game_map, fov_map, fov_recompute, screen_width, screen_height, colors)
+        render_all(con, entities, player, game_map, fov_map, fov_recompute, screen_width, screen_height, colors)
 
         fov_recompute = False
         libtcod.console_flush() # Print all the last 'put chars' onto the console.
@@ -73,6 +77,7 @@ def main():
         move = action.get('move')
         exit = action.get('exit')
         fullscreen = action.get('fullscreen')
+        player_turn_results = []
 
         if move and game_state == GameStates.PLAYERS_TURN:
             dx, dy = move
@@ -83,7 +88,8 @@ def main():
                 target = get_blocking_entities_at_location(entities, destination_x, destination_y)
 
                 if target:
-                    print('You kick the ' + target.name + ' in the shins, much to its annoyance!')
+                    attack_results = player.fighter.attack(target)
+                    player_turn_results.extend(attack_results)
                 else: # Move player only if he's not blocked by an entity or a wall.
                     player.move(dx, dy)
                     fov_recompute = True
@@ -91,14 +97,51 @@ def main():
                 game_state = GameStates.ENEMY_TURN
         if exit:
             return True
+
         if fullscreen:
             libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
+
+        for player_turn_result in player_turn_results:
+            message = player_turn_result.get('message')
+            dead_entity = player_turn_result.get('dead')
+
+            if message:
+                print(message)
+
+            if dead_entity:
+                if dead_entity == player:
+                    message, game_state = kill_player(dead_entity)
+                else:
+                    message = kill_monster(dead_entity)
+
+                print(message)
+
         if game_state == GameStates.ENEMY_TURN: # If it's not the player's turn , make every enemy do something , and then switch back to player's turn.
             for entity in entities:
-                if entity != player:
-                    print('The ' + entity.name + ' ponders the meaning of its existence.')
+                if entity.ai:
+                    enemy_turn_results = entity.ai.take_turn(player, fov_map, game_map, entities)
 
-            game_state = GameStates.PLAYERS_TURN
+                    for enemy_turn_result in enemy_turn_results:
+                        message = enemy_turn_result.get('message')
+                        dead_entity = enemy_turn_result.get('dead')
+
+                        if message:
+                            print(message)
+
+                        if dead_entity:
+                            if dead_entity == player:
+                                message, game_state = kill_player(dead_entity)
+                            else:
+                                message = kill_monster(dead_entity)
+
+                            print(message)
+
+                            if game_state == GameStates.PLAYER_DEAD:
+                                break
+                    if game_state == GameStates.PLAYER_DEAD:
+                        break
+            else:
+                game_state = GameStates.PLAYERS_TURN
 
 
 if __name__ == '__main__':
