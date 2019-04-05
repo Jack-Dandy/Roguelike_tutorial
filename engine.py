@@ -2,8 +2,10 @@ import tcod as libtcod
 from input_handlers import handle_keys # Importing a function
 from entity import Entity # Importing a class
 from fov_functions import initialize_fov , recompute_fov # FoV function
+from game_states import GameStates # state enums
 from render_functions import clear_all, render_all # Importing some functions
 from map_objects.game_map import GameMap
+from entity import Entity, get_blocking_entities_at_location
 
 def main():
     # Variables for screen and map size.
@@ -22,6 +24,9 @@ def main():
     fov_light_walls = True # tells us whether or not to 'light up' the walls we see
     fov_radius = 10
 
+    # Variable for deciding on monster population on the map.
+    max_monsters_per_room = 3
+
     # Making a dictionary that holds game colors.
     colors = {
         'dark_wall': libtcod.Color(0, 0, 100),
@@ -31,9 +36,8 @@ def main():
     }
     # We use 'int' casting since the libtcod functions require integers, not floats.
     # Creating the entities for the game..
-    player = Entity(int(screen_width / 2), int(screen_height / 2), '@', libtcod.white)
-    npc = Entity(int(screen_width / 2 - 5), int(screen_height / 2), '@', libtcod.yellow)
-    entities = [npc, player] # Putting the entities in a list.
+    player = Entity(0, 0, '@', libtcod.white, 'Player', blocks=True)
+    entities = [player] # Putting the entities in a list.
 
     libtcod.console_set_custom_font('arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
 
@@ -41,7 +45,7 @@ def main():
 
     con = libtcod.console_new(screen_width, screen_height) # Setting up a default console..
     game_map = GameMap(map_width, map_height)
-    game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height, player)
+    game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height, player, entities, max_monsters_per_room)
     # Flag for deciding on whether to recompute FoV.
     fov_recompute = True
     fov_map = initialize_fov(game_map)
@@ -49,6 +53,9 @@ def main():
     # Setting up user inputs. Keyboard and mouse.
     key = libtcod.Key()
     mouse = libtcod.Mouse()
+
+    # Setting up a variable that will hold the current game state. player turns, enemy turns, menus, etc..
+    game_state = GameStates.PLAYERS_TURN
 
     while not libtcod.console_is_window_closed():
         libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS, key, mouse) # This will record user inputs in the 'key' and 'mouse' variables.
@@ -67,15 +74,31 @@ def main():
         exit = action.get('exit')
         fullscreen = action.get('fullscreen')
 
-        if move:
+        if move and game_state == GameStates.PLAYERS_TURN:
             dx, dy = move
-            if not game_map.is_blocked(player.x + dx, player.y + dy): # Move player only if he's not blocked.
-                player.move(dx, dy)
-                fov_recompute = True
+            destination_x = player.x + dx
+            destination_y = player.y + dy
+
+            if not game_map.is_blocked(destination_x, destination_y):
+                target = get_blocking_entities_at_location(entities, destination_x, destination_y)
+
+                if target:
+                    print('You kick the ' + target.name + ' in the shins, much to its annoyance!')
+                else: # Move player only if he's not blocked by an entity or a wall.
+                    player.move(dx, dy)
+                    fov_recompute = True
+
+                game_state = GameStates.ENEMY_TURN
         if exit:
             return True
         if fullscreen:
             libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
+        if game_state == GameStates.ENEMY_TURN: # If it's not the player's turn , make every enemy do something , and then switch back to player's turn.
+            for entity in entities:
+                if entity != player:
+                    print('The ' + entity.name + ' ponders the meaning of its existence.')
+
+            game_state = GameStates.PLAYERS_TURN
 
 
 if __name__ == '__main__':
