@@ -3,14 +3,14 @@ import tcod as libtcod
 from render_functions import RenderOrder
 
 
-# This file is used to define the generic 'entities' that can be interacted with in the game. Player, enemies, objects, etc..
+# This file is used to define the generic 'entities' that can be interacted with in the game. Player, enemies, items, etc..
 
 class Entity:
     """
     A generic object to represent players, enemies, items, etc.
     """
 
-    def __init__(self, x, y, char, color, name, blocks=False, render_order=RenderOrder.CORPSE,  fighter=None, ai=None):
+    def __init__(self, x, y, char, color, name, blocks=False, render_order=RenderOrder.CORPSE,  fighter=None, ai=None, item=None, inventory=None):
         self.x = x
         self.y = y
         self.char = char
@@ -20,6 +20,8 @@ class Entity:
         self.render_order = render_order
         self.fighter = fighter
         self.ai = ai
+        self.item = item
+        self.inventory = inventory
 
         # Note that 'component' field. It makes sense that if an entity has some components,
         # then these components have an 'owner' which is the entity! This will enable us to access an entity from it's component.
@@ -28,6 +30,12 @@ class Entity:
 
         if self.ai:
             self.ai.owner = self
+
+        if self.item:
+            self.item.owner = self
+
+        if self.inventory:
+            self.inventory.owner = self
 
     def move(self, dx, dy):
         # Move the entity by a given amount
