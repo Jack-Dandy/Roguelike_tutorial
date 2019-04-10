@@ -3,7 +3,6 @@ from components.ai import ConfusedMonster
 from game_messages import Message
 from entity import get_blocking_entities_at_location
 
-
 def heal(*args, **kwargs):
     entity = args[0]
     amount = kwargs.get('amount')
