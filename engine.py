@@ -1,103 +1,116 @@
 import tcod as libtcod
-from input_handlers import handle_keys, handle_mouse # Importing a function
-from components.fighter import Fighter # Import the 'fighter' component
-from components.inventory import Inventory # Import the 'inventory' component
+from input_handlers import handle_keys, handle_mouse, handle_main_menu # Importing a function
 from entity import Entity # Importing a class
 from fov_functions import initialize_fov , recompute_fov # FoV function
-from game_messages import Message, MessageLog
+from game_messages import Message
 from game_states import GameStates # state enums
-from render_functions import clear_all, render_all, RenderOrder # Importing some functions
-from map_objects.game_map import GameMap
-from entity import Entity, get_blocking_entities_at_location
+from render_functions import clear_all, render_all # Importing some functions
+from loader_functions.initialize_new_game import get_constants, get_game_variables
+from loader_functions.data_loaders import load_game, save_game
+from menus import main_menu, message_box
+from entity import  get_blocking_entities_at_location
 from death_functions import kill_monster, kill_player
 
 
 
 def main():
-    # Variables for screen and map size.
-    screen_width = 80
-    screen_height = 50
-    # Health bar variables
-    bar_width = 20
-    panel_height = 7
-    panel_y = screen_height - panel_height
-
-    # Panel variables
-    message_x = bar_width + 2
-    message_width = screen_width - bar_width - 2
-    message_height = panel_height - 1
-
-    map_width = 80
-    map_height = 43
-
-    # Some variables used for the dungeon generation algorithm.
-    room_max_size = 10
-    room_min_size = 6
-    max_rooms = 30
-
-    # Variables for Field of Vision for the adventurer.
-    fov_algorithm = 0 # '0' is just the default algorithm that libtcod uses; it has more
-    fov_light_walls = True # tells us whether or not to 'light up' the walls we see
-    fov_radius = 10
-
-    # Variable for deciding on monster & item population on the map.
-    max_monsters_per_room = 3
-    max_items_per_room = 2
-
-    # Making a dictionary that holds game colors.
-    colors = {
-        'dark_wall': libtcod.Color(0, 0, 100),
-        'dark_ground': libtcod.Color(50, 50, 150),
-        'light_wall': libtcod.Color(130, 110, 50),
-        'light_ground': libtcod.Color(200, 180, 50)
-    }
-    # We use 'int' casting since the libtcod functions require integers, not floats.
-    # Creating the entities & components for the game..
-    fighter_component = Fighter(hp=30, defense=2, power=5)
-    inventory_component = Inventory(26)
-    player = Entity(0, 0, '@', libtcod.white, 'Player', blocks=True, render_order=RenderOrder.ACTOR,
-                    fighter=fighter_component, inventory=inventory_component)
-    entities = [player] # Putting the entities in a list.
+    constants = get_constants()
 
     libtcod.console_set_custom_font('arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
 
-    libtcod.console_init_root(screen_width, screen_height, 'libtcod tutorial revised', False)
+    libtcod.console_init_root(constants['screen_width'], constants['screen_height'], constants['window_title'], False)
 
-    con = libtcod.console_new(screen_width, screen_height) # Setting up a default console..
-    panel = libtcod.console_new(screen_width, panel_height) # Setting up another console, where we'll put stuff like HP and a message log.
-    game_map = GameMap(map_width, map_height)
-    game_map.make_map(max_rooms, room_min_size, room_max_size, map_width, map_height, player, entities, max_monsters_per_room, max_items_per_room)
-    # Flag for deciding on whether to recompute FoV.
-    fov_recompute = True
-    fov_map = initialize_fov(game_map)
+    con = libtcod.console_new(constants['screen_width'], constants['screen_height'])
+    panel = libtcod.console_new(constants['screen_width'], constants['panel_height'])
 
-    # Creating the message log.
-    message_log = MessageLog(message_x, message_width, message_height)
+    player = None
+    entities = []
+    game_map = None
+    message_log = None
+    game_state = None
 
-    # Setting up user inputs. Keyboard and mouse.
+    show_main_menu = True
+    show_load_error_message = False
+
+    main_menu_background_image = libtcod.image_load('menu_background.png')
+
     key = libtcod.Key()
     mouse = libtcod.Mouse()
 
-    # Setting up a variable that will hold the current game state. player turns, enemy turns, menus, etc..
+    while not libtcod.console_is_window_closed():
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
+
+        if show_main_menu:
+            main_menu(con, main_menu_background_image, constants['screen_width'],
+                      constants['screen_height'])
+
+            if show_load_error_message:
+                message_box(con, 'No save game to load', 50, constants['screen_width'], constants['screen_height'])
+
+            libtcod.console_flush()
+
+            action = handle_main_menu(key)
+
+            new_game = action.get('new_game')
+            load_saved_game = action.get('load_game')
+            exit_game = action.get('exit')
+
+            if show_load_error_message and (new_game or load_saved_game or exit_game):
+                show_load_error_message = False
+            elif new_game:
+                player, entities, game_map, message_log, game_state = get_game_variables(constants)
+                game_state = GameStates.PLAYERS_TURN
+
+                show_main_menu = False
+            elif load_saved_game:
+                try:
+                    player, entities, game_map, message_log, game_state = load_game()
+                    show_main_menu = False
+                except FileNotFoundError:
+                    show_load_error_message = True
+            elif exit_game:
+                break
+
+        else:
+            libtcod.console_clear(con)
+            play_game(player, entities, game_map, message_log, game_state, con, panel, constants)
+
+            show_main_menu = True
+
+
+def play_game(player, entities, game_map, message_log, game_state, con, panel, constants):
+    fov_recompute = True
+
+    fov_map = initialize_fov(game_map)
+
+    key = libtcod.Key()
+    mouse = libtcod.Mouse()
+
     game_state = GameStates.PLAYERS_TURN
     previous_game_state = game_state
+
     targeting_item = None
 
     while not libtcod.console_is_window_closed():
-        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse) # This will record user inputs in the 'key' and 'mouse' variables.
-        if fov_recompute: # Check if to recompute FoV.
-            recompute_fov(fov_map, player.x, player.y, fov_radius, fov_light_walls, fov_algorithm)
-        render_all(con, panel, entities, player, game_map, fov_map, fov_recompute, message_log, screen_width,
-                   screen_height, bar_width, panel_height, panel_y, mouse, colors, game_state)
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
+
+        if fov_recompute:
+            recompute_fov(fov_map, player.x, player.y, constants['fov_radius'], constants['fov_light_walls'],
+                          constants['fov_algorithm'])
+
+        render_all(con, panel, entities, player, game_map, fov_map, fov_recompute, message_log,
+                   constants['screen_width'], constants['screen_height'], constants['bar_width'],
+                   constants['panel_height'], constants['panel_y'], mouse, constants['colors'], game_state)
 
         fov_recompute = False
-        libtcod.console_flush() # Print all the last 'put chars' onto the console.
 
-        clear_all(con, entities) # Drawing a blank on the last visited cell.. So there'll be no trail.
-        action = handle_keys(key, game_state) # The 'handle_keys' function always returns a dictionary.
+        libtcod.console_flush()
+
+        clear_all(con, entities)
+
+        action = handle_keys(key, game_state)
         mouse_action = handle_mouse(mouse)
-        # By using the 'get' function on the 'action' table, we can see if we have one of the related keys.
-        # Remember that 'get' gives you the VALUE of the key-value pair.
+
         move = action.get('move')
         pickup = action.get('pickup')
         show_inventory = action.get('show_inventory')
@@ -122,8 +135,9 @@ def main():
                 if target:
                     attack_results = player.fighter.attack(target)
                     player_turn_results.extend(attack_results)
-                else: # Move player only if he's not blocked by an entity or a wall.
+                else:
                     player.move(dx, dy)
+
                     fov_recompute = True
 
                 game_state = GameStates.ENEMY_TURN
@@ -159,7 +173,7 @@ def main():
             if left_click:
                 target_x, target_y = left_click
 
-                item_use_results = player.inventory.use(targeting_item, entities=entities, fov_map=fov_map, # Use the fireball spell
+                item_use_results = player.inventory.use(targeting_item, entities=entities, fov_map=fov_map, map = game_map,
                                                         target_x=target_x, target_y=target_y)
                 player_turn_results.extend(item_use_results)
             elif right_click:
@@ -171,6 +185,8 @@ def main():
             elif game_state == GameStates.TARGETING:
                 player_turn_results.append({'targeting_cancelled': True})
             else:
+                save_game(player, entities, game_map, message_log, game_state)
+
                 return True
 
         if fullscreen:
@@ -188,10 +204,6 @@ def main():
             if message:
                 message_log.add_message(message)
 
-            if targeting_cancelled:
-                game_state = previous_game_state
-                message_log.add_message(Message('Targeting cancelled'))
-
             if dead_entity:
                 if dead_entity == player:
                     message, game_state = kill_player(dead_entity)
@@ -203,7 +215,14 @@ def main():
             if item_added:
                 entities.remove(item_added)
 
+                game_state = GameStates.ENEMY_TURN
+
             if item_consumed:
+                game_state = GameStates.ENEMY_TURN
+
+            if item_dropped:
+                entities.append(item_dropped)
+
                 game_state = GameStates.ENEMY_TURN
 
             if targeting:
@@ -214,11 +233,12 @@ def main():
 
                 message_log.add_message(targeting_item.item.targeting_message)
 
-            if item_dropped:
-                entities.append(item_dropped)
-                game_state = GameStates.ENEMY_TURN
+            if targeting_cancelled:
+                game_state = previous_game_state
 
-        if game_state == GameStates.ENEMY_TURN: # If it's not the player's turn , make every enemy do something , and then switch back to player's turn.
+                message_log.add_message(Message('Targeting cancelled'))
+
+        if game_state == GameStates.ENEMY_TURN:
             for entity in entities:
                 if entity.ai:
                     enemy_turn_results = entity.ai.take_turn(player, fov_map, game_map, entities)
@@ -240,11 +260,11 @@ def main():
 
                             if game_state == GameStates.PLAYER_DEAD:
                                 break
+
                     if game_state == GameStates.PLAYER_DEAD:
                         break
             else:
                 game_state = GameStates.PLAYERS_TURN
-
 
 if __name__ == '__main__':
     main()

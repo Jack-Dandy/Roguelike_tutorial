@@ -7,7 +7,7 @@ from components.item import Item
 
 from entity import Entity
 from game_messages import Message
-from item_functions import cast_confuse, cast_fireball, cast_lightning, heal
+from item_functions import cast_teleportation, cast_confuse, cast_fireball, cast_lightning, heal
 from map_objects.rectangle import Rect
 from map_objects.tile import Tile
 
@@ -16,7 +16,6 @@ class GameMap:
         self.width = width
         self.height = height
         self.tiles = self.initialize_tiles()
-
 
     def initialize_tiles(self):
         # The below line creates a matrix of tile objects! See the 'training program' file if you need a refresher of how to create matrices.
@@ -137,9 +136,14 @@ class GameMap:
             if not any([entity for entity in entities if entity.x == x and entity.y == y]):
                 item_chance = randint(0, 100)
 
-                if item_chance < 70:
+                if item_chance < 60:
                     item_component = Item(use_function=heal, amount=4)
                     item = Entity(x, y, '!', libtcod.violet, 'Healing Potion', render_order=RenderOrder.ITEM,
+                                  item=item_component)
+                elif item_chance < 70:
+                    item_component = Item(use_function=cast_teleportation, targeting=True, targeting_message=Message(
+                        'Left-click an area to teleport there, or right-click to cancel.', libtcod.light_cyan))
+                    item = Entity(x, y, '#', libtcod.light_green, 'Teleportation Scroll', render_order=RenderOrder.ITEM,
                                   item=item_component)
                 elif item_chance < 80:
                     item_component = Item(use_function=cast_fireball, targeting=True, targeting_message=Message(

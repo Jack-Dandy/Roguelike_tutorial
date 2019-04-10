@@ -37,6 +37,12 @@ class Entity:
         if self.inventory:
             self.inventory.owner = self
 
+    def teleport(self,x_new,y_new):
+        # Move the entity directly into these coordinates.
+        self.x = x_new
+        self.y = y_new
+
+
     def move(self, dx, dy):
         # Move the entity by a given amount
         self.x += dx

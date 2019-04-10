@@ -1,6 +1,7 @@
 import tcod as libtcod
 from components.ai import ConfusedMonster
 from game_messages import Message
+from entity import get_blocking_entities_at_location
 
 
 def heal(*args, **kwargs):
@@ -92,5 +93,35 @@ def cast_confuse(*args, **kwargs):
             break
     else:
         results.append({'consumed': False, 'message': Message('There is no targetable enemy at that location.', libtcod.yellow)})
+
+    return results
+
+def cast_teleportation(*args, **kwargs):
+    caster = args[0]
+    entities = kwargs.get('entities')
+    fov_map = kwargs.get('fov_map')
+    map = kwargs.get('map')
+    target_x = kwargs.get('target_x')
+    target_y = kwargs.get('target_y')
+
+    results = []
+    target = None
+
+    # Check 'is_blocked' from game_map.py
+    # Check 'get_blocking_entities_at_location' from entity.py
+    # Check that teleportation coordinates are within FoV, with 'libtcod.map_is_in_fov(fov_map, target_x, target_y)' like in fireball
+
+    if (not map.is_blocked(target_x,target_y)) and\
+            (not get_blocking_entities_at_location(entities,target_x,target_y)) and\
+            (libtcod.map_is_in_fov(fov_map, target_x, target_y)):
+        target = True
+
+    # Send message like in fireball/lightning spells, and teleport the player accordingly.
+    if target:
+        results.append({'consumed': True, 'message': Message('The scroll evaporates and you teleport to a new tile!', libtcod.orange)})
+        caster.teleport(target_x,target_y)
+        return results
+
+    results.append({'consumed': False, 'message': Message('You cannot teleport to the selected tile!', libtcod.red)})
 
     return results
